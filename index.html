@@ -61,6 +61,43 @@ header .sub{color:var(--muted);font-size:14px;margin-top:4px}
     color:var(--muted);
 }
 
+.model-box{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex-wrap:wrap;
+}
+
+button.tiny{
+    padding:7px 12px;
+    font-size:12px;
+    border-radius:8px;
+}
+
+.update-note{
+    grid-column:1/-1;
+    display:none;
+    padding:12px 16px;
+    border-radius:10px;
+    font-size:13px;
+    line-height:1.7;
+    border:1px solid;
+}
+
+.update-note.show{display:block}
+
+.update-note.ok{
+    background:#052e16;
+    border-color:#166534;
+    color:#86efac;
+}
+
+.update-note.warn{
+    background:#422006;
+    border-color:#a16207;
+    color:#fde68a;
+}
+
 .panel{
     background:var(--panel);
     border:1px solid var(--line);
@@ -348,8 +385,13 @@ footer{
         <h1>🦺 SafetyCheck</h1>
         <div class="sub">ตรวจการสวมเสื้อสะท้อนแสงก่อนเข้าพื้นที่ปฏิบัติงาน</div>
     </div>
-    <div class="badge" id="model-status">⏳ ยังไม่ได้โหลดโมเดล</div>
+    <div class="model-box">
+        <div class="badge" id="model-status">⏳ ยังไม่ได้โหลดโมเดล</div>
+        <button class="tiny ghost" id="checkBtn" onclick="checkForUpdate()">🔄 เช็คอัปเดตโมเดล</button>
+    </div>
 </header>
+
+<div id="update-note" class="update-note"></div>
 
 <!-- ============ ซ้าย: กล้อง ============ -->
 <div class="panel">
@@ -456,6 +498,7 @@ function labelInfo(raw){
    ============================================================ */
 
 let model, webcam, maxPredictions;
+let loadedMeta = null;    // metadata ของโมเดลที่โหลดอยู่จริง ใช้บอกเวอร์ชัน
 let running     = false;
 let soundOn     = true;
 
@@ -485,12 +528,102 @@ async function loadModel(){
 
     $("model-status").innerHTML = "⏳ กำลังโหลดโมเดล...";
 
+    // อ่าน metadata แบบไม่กันแคช เพื่อให้ได้ไฟล์ชุดเดียวกับที่ไลบรารีใช้จริง
+    // (ถ้าไปดึงของสดมาแสดง จะกลายเป็นบอกเวอร์ชันใหม่ทั้งที่โมเดลที่ใช้อยู่เป็นตัวเก่าจากแคช)
+    try{
+        const res = await fetch(MODEL_URL + "metadata.json");
+        loadedMeta = await res.json();
+    }catch(e){
+        console.warn("อ่าน metadata ไม่ได้:", e);
+        loadedMeta = null;
+    }
+
     model = await tmImage.load(MODEL_URL + "model.json", MODEL_URL + "metadata.json");
     maxPredictions = model.getTotalClasses();
 
     buildBars();
+    showModelInfo();
+}
 
-    $("model-status").innerHTML = "✅ โมเดลพร้อมใช้งาน (" + maxPredictions + " คลาส)";
+/* ------------------------------------------------------------
+   ตัวบอกเวอร์ชันโมเดล
+   Teachable Machine ไม่ได้ซิงก์โมเดลให้อัตโนมัติ — เทรนใหม่แล้วต้องกด
+   Export → Upload ซ้ำ ส่วนนี้จึงมีไว้ให้เห็นด้วยตาว่ากำลังใช้โมเดลตัวไหน
+   ------------------------------------------------------------ */
+
+function fmtTime(iso){
+    if(!iso) return "ไม่ทราบ";
+
+    const d = new Date(iso);
+    if(isNaN(d.getTime())) return iso;
+
+    return d.toLocaleString("th-TH", {
+        day:"numeric", month:"short", year:"numeric",
+        hour:"2-digit", minute:"2-digit"
+    });
+}
+
+function showModelInfo(){
+    if(!loadedMeta){
+        $("model-status").innerHTML = "✅ พร้อมใช้งาน · " + maxPredictions + " คลาส · ไม่ทราบเวอร์ชัน";
+        return;
+    }
+
+    $("model-status").innerHTML =
+        "✅ " + (loadedMeta.modelName || "โมเดล") +
+        " · " + maxPredictions + " คลาส" +
+        " · เวอร์ชัน " + fmtTime(loadedMeta.timeStamp);
+
+    warnUnknownLabels(loadedMeta.labels);
+}
+
+// ถ้าเทรนเพิ่มคลาสใหม่มา แต่ยังไม่ได้เพิ่มใน LABELS โค้ดจะไม่รู้จักและนับเป็น "ไม่ผ่าน" เงียบๆ
+function warnUnknownLabels(labels){
+    if(!Array.isArray(labels)) return;
+
+    const unknown = labels.filter(l => !LABELS[String(l).trim().toLowerCase()]);
+    if(!unknown.length) return;
+
+    setUpdateNote(
+        "⚠️ โมเดลมีคลาสที่โค้ดยังไม่รู้จัก: " + unknown.join(", ") +
+        " — ต้องเพิ่มใน LABELS ไม่งั้นระบบจะนับเป็น \"ไม่ผ่าน\"", "warn"
+    );
+}
+
+function setUpdateNote(msg, kind){
+    const el = $("update-note");
+
+    el.innerHTML = msg;
+    el.className = "update-note show " + (kind || "");
+}
+
+// เทียบเวอร์ชันที่โหลดอยู่ กับตัวล่าสุดบนเซิร์ฟเวอร์ (ดึงสดโดยข้ามแคช)
+async function checkForUpdate(){
+    const btn = $("checkBtn");
+
+    btn.disabled  = true;
+    btn.innerHTML = "⏳ กำลังเช็ค...";
+
+    try{
+        const res   = await fetch(MODEL_URL + "metadata.json?t=" + Date.now(), { cache:"no-store" });
+        const fresh = await res.json();
+
+        if(!loadedMeta){
+            setUpdateNote("โหลดโมเดลให้เสร็จก่อน แล้วค่อยเช็คอัปเดต", "warn");
+        }else if(fresh.timeStamp === loadedMeta.timeStamp){
+            setUpdateNote("✅ ใช้โมเดลเวอร์ชันล่าสุดแล้ว (" + fmtTime(fresh.timeStamp) + ")", "ok");
+        }else{
+            setUpdateNote(
+                "🔔 มีโมเดลใหม่บนคลาวด์! เวอร์ชัน " + fmtTime(fresh.timeStamp) +
+                " (ที่ใช้อยู่: " + fmtTime(loadedMeta.timeStamp) + ") — กด Ctrl+Shift+R เพื่อโหลดใหม่", "warn"
+            );
+        }
+    }catch(e){
+        setUpdateNote("❌ เช็คอัปเดตไม่สำเร็จ: " + e.message, "warn");
+    }
+
+    btn.disabled  = false;
+    btn.innerHTML = "🔄 เช็คอัปเดตโมเดล";
 }
 
 function buildBars(){
