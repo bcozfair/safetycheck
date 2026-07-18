@@ -9,400 +9,706 @@
 <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
 
 <style>
-*{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',Tahoma,sans-serif}
+*{margin:0;padding:0;box-sizing:border-box}
 
 :root{
-    --bg:#0f172a;
-    --panel:#1e293b;
-    --line:#334155;
-    --text:#e2e8f0;
-    --muted:#94a3b8;
-    --pass:#22c55e;
-    --fail:#ef4444;
-    --wait:#f59e0b;
-    --accent:#38bdf8;
+    --bg:#080c16;
+    --panel:rgba(23,32,50,.72);
+    --panel-solid:#151d2e;
+    --line:rgba(148,163,184,.16);
+    --line-strong:rgba(148,163,184,.3);
+    --text:#e8eef8;
+    --muted:#8fa3bf;
+    --dim:#5a6b85;
+
+    --pass:#22e07f;
+    --fail:#ff4d5e;
+    --wait:#ffb01f;
+    --accent:#3ddbff;
+
+    --ease:cubic-bezier(.4,0,.2,1);
+    --spring:cubic-bezier(.34,1.56,.64,1);
 }
 
+html{scroll-behavior:smooth}
+
 body{
+    font-family:'Segoe UI',-apple-system,'Noto Sans Thai',Tahoma,sans-serif;
     background:var(--bg);
     color:var(--text);
     min-height:100vh;
-    padding:20px;
+    padding:24px 20px 40px;
+    overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;
 }
 
-.wrap{
-    max-width:1100px;
-    margin:0 auto;
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:20px;
+/* ============ แสงพื้นหลังที่ตอบสนองตามสถานะ ============ */
+
+.ambient{
+    position:fixed;
+    inset:0;
+    pointer-events:none;
+    z-index:0;
+    background:
+        radial-gradient(60vw 60vh at 50% -10%, rgba(61,219,255,.10), transparent 70%),
+        radial-gradient(50vw 50vh at 100% 100%, rgba(61,219,255,.05), transparent 70%);
+    transition:background 1.1s var(--ease);
 }
+
+.app.wait .ambient{
+    background:
+        radial-gradient(60vw 60vh at 50% -10%, rgba(255,176,31,.16), transparent 70%),
+        radial-gradient(50vw 50vh at 100% 100%, rgba(255,176,31,.07), transparent 70%);
+}
+
+.app.pass .ambient{
+    background:
+        radial-gradient(70vw 70vh at 50% -10%, rgba(34,224,127,.22), transparent 70%),
+        radial-gradient(50vw 50vh at 100% 100%, rgba(34,224,127,.10), transparent 70%);
+}
+
+.app.fail .ambient{
+    background:
+        radial-gradient(70vw 70vh at 50% -10%, rgba(255,77,94,.24), transparent 70%),
+        radial-gradient(50vw 50vh at 100% 100%, rgba(255,77,94,.11), transparent 70%);
+    animation:alarm 1.5s var(--ease) infinite;
+}
+
+@keyframes alarm{
+    0%,100%{opacity:1}
+    50%{opacity:.55}
+}
+
+.app{position:relative;z-index:1;max-width:1180px;margin:0 auto}
+
+/* ============ หัวเว็บ ============ */
 
 header{
-    grid-column:1/-1;
     display:flex;
     align-items:center;
     justify-content:space-between;
     flex-wrap:wrap;
-    gap:12px;
-    padding-bottom:16px;
-    border-bottom:2px solid var(--line);
+    gap:16px;
+    margin-bottom:22px;
+    animation:drop .6s var(--ease) both;
 }
 
-header h1{font-size:24px;letter-spacing:.5px}
-header .sub{color:var(--muted);font-size:14px;margin-top:4px}
+.brand{display:flex;align-items:center;gap:14px}
 
-.badge{
+.logo{
+    width:52px;height:52px;
+    display:grid;place-items:center;
+    font-size:27px;
+    border-radius:15px;
+    background:linear-gradient(140deg,rgba(61,219,255,.22),rgba(61,219,255,.05));
+    border:1px solid rgba(61,219,255,.3);
+    box-shadow:0 0 26px rgba(61,219,255,.16);
+    animation:float 5s ease-in-out infinite;
+}
+
+@keyframes float{
+    0%,100%{transform:translateY(0)}
+    50%{transform:translateY(-5px)}
+}
+
+.brand h1{
+    font-size:25px;
+    font-weight:700;
+    letter-spacing:-.4px;
+    background:linear-gradient(100deg,#fff,#8fd4ff);
+    -webkit-background-clip:text;
+    background-clip:text;
+    -webkit-text-fill-color:transparent;
+}
+
+.brand p{color:var(--muted);font-size:13.5px;margin-top:3px}
+
+.pill{
+    display:flex;align-items:center;gap:9px;
     background:var(--panel);
     border:1px solid var(--line);
-    padding:8px 14px;
+    padding:10px 17px;
     border-radius:999px;
-    font-size:13px;
+    font-size:12.5px;
     color:var(--muted);
+    backdrop-filter:blur(14px);
+    transition:border-color .3s var(--ease),color .3s var(--ease);
 }
 
-.model-box{
+.pill.ready{border-color:rgba(34,224,127,.35);color:#a7f3cf}
+.pill.error{border-color:rgba(255,77,94,.4);color:#ffc2c8}
+
+.dot{
+    width:7px;height:7px;border-radius:50%;
+    background:var(--dim);
+    flex-shrink:0;
+}
+
+.pill.loading .dot{background:var(--wait);animation:blink 1s infinite}
+.pill.ready .dot{background:var(--pass);box-shadow:0 0 10px var(--pass)}
+.pill.error .dot{background:var(--fail)}
+
+@keyframes blink{50%{opacity:.25}}
+
+/* ============ กล่องแจ้งเตือน ============ */
+
+.note{
+    display:none;
+    padding:13px 18px;
+    border-radius:13px;
+    font-size:13px;
+    line-height:1.75;
+    border:1px solid;
+    margin-bottom:18px;
+    backdrop-filter:blur(10px);
+}
+
+.note.show{display:block;animation:drop .45s var(--spring) both}
+.note.ok{background:rgba(34,224,127,.09);border-color:rgba(34,224,127,.32);color:#a7f3cf}
+.note.warn{background:rgba(255,176,31,.09);border-color:rgba(255,176,31,.32);color:#ffe0a3}
+.note.err{background:rgba(255,77,94,.09);border-color:rgba(255,77,94,.32);color:#ffc2c8}
+
+@keyframes drop{
+    from{opacity:0;transform:translateY(-11px)}
+    to{opacity:1;transform:none}
+}
+
+/* ============ เลย์เอาต์ ============ */
+
+main{
+    display:grid;
+    grid-template-columns:1.15fr .85fr;
+    gap:18px;
+    align-items:start;
+}
+
+.card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:20px;
+    padding:20px;
+    backdrop-filter:blur(18px);
+    animation:rise .55s var(--ease) both;
+}
+
+.card + .card{margin-top:18px}
+
+@keyframes rise{
+    from{opacity:0;transform:translateY(16px)}
+    to{opacity:1;transform:none}
+}
+
+.card:nth-child(1){animation-delay:.05s}
+.card:nth-child(2){animation-delay:.12s}
+.card:nth-child(3){animation-delay:.19s}
+
+.card h2{
+    font-size:11.5px;
+    text-transform:uppercase;
+    letter-spacing:1.4px;
+    color:var(--dim);
+    margin-bottom:15px;
     display:flex;
     align-items:center;
     gap:8px;
-    flex-wrap:wrap;
 }
 
-button.tiny{
-    padding:7px 12px;
-    font-size:12px;
-    border-radius:8px;
+.card h2::after{
+    content:"";
+    flex:1;height:1px;
+    background:linear-gradient(90deg,var(--line),transparent);
 }
 
-.update-note{
-    grid-column:1/-1;
-    display:none;
-    padding:12px 16px;
-    border-radius:10px;
-    font-size:13px;
-    line-height:1.7;
-    border:1px solid;
-}
-
-.update-note.show{display:block}
-
-.update-note.ok{
-    background:#052e16;
-    border-color:#166534;
-    color:#86efac;
-}
-
-.update-note.warn{
-    background:#422006;
-    border-color:#a16207;
-    color:#fde68a;
-}
-
-.panel{
-    background:var(--panel);
-    border:1px solid var(--line);
-    border-radius:16px;
-    padding:20px;
-}
-
-.panel h2{
-    font-size:15px;
-    text-transform:uppercase;
-    letter-spacing:1px;
-    color:var(--muted);
-    margin-bottom:16px;
-}
-
-/* ---------- กล้อง ---------- */
+/* ============ จอกล้อง ============ */
 
 #stage{
     position:relative;
     width:100%;
-    aspect-ratio:1/1;
-    background:#000;
-    border-radius:12px;
+    aspect-ratio:4/3;
+    background:radial-gradient(circle at 50% 40%,#101827,#05080f);
+    border-radius:16px;
     overflow:hidden;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    border:4px solid var(--line);
-    transition:border-color .25s;
+    display:grid;
+    place-items:center;
+    border:2px solid var(--line-strong);
+    transition:border-color .45s var(--ease),box-shadow .45s var(--ease);
 }
 
-#stage.pass{border-color:var(--pass)}
-#stage.fail{border-color:var(--fail)}
-#stage.wait{border-color:var(--wait)}
+.app.wait #stage{border-color:rgba(255,176,31,.55);box-shadow:0 0 42px rgba(255,176,31,.17) inset}
+.app.pass #stage{border-color:var(--pass);box-shadow:0 0 60px rgba(34,224,127,.3) inset,0 0 34px rgba(34,224,127,.22)}
+.app.fail #stage{border-color:var(--fail);box-shadow:0 0 60px rgba(255,77,94,.3) inset,0 0 34px rgba(255,77,94,.22)}
 
 #stage canvas,#stage img{
-    width:100%;
-    height:100%;
+    width:100%;height:100%;
     object-fit:cover;
     display:block;
+    animation:fadein .5s var(--ease) both;
 }
 
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+
 #placeholder{
-    color:#475569;
-    font-size:15px;
     text-align:center;
-    padding:20px;
-    line-height:1.8;
+    padding:30px;
+    color:var(--dim);
+    font-size:14px;
+    line-height:2;
 }
+
+#placeholder .icon{
+    font-size:46px;
+    display:block;
+    margin-bottom:14px;
+    opacity:.5;
+    animation:float 4s ease-in-out infinite;
+}
+
+/* เส้นสแกนวิ่งตอนกำลังตรวจ */
+.scanline{
+    position:absolute;
+    left:0;right:0;height:20%;
+    background:linear-gradient(180deg,transparent,rgba(61,219,255,.16),transparent);
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .4s;
+}
+
+.app.wait .scanline{opacity:1;animation:scan 2.6s var(--ease) infinite}
+
+@keyframes scan{
+    0%{transform:translateY(-100%)}
+    100%{transform:translateY(500%)}
+}
+
+/* วงแหวนนับเวลาตอนต้องยืนนิ่ง */
+.ring{
+    position:absolute;
+    width:132px;height:132px;
+    opacity:0;
+    transform:rotate(-90deg) scale(.85);
+    transition:opacity .35s var(--ease),transform .35s var(--spring);
+    pointer-events:none;
+    filter:drop-shadow(0 0 8px rgba(61,219,255,.5));
+}
+
+.ring.on{opacity:1;transform:rotate(-90deg) scale(1)}
+
+.ring circle{fill:none;stroke-width:5;stroke-linecap:round}
+.ring .bg{stroke:rgba(255,255,255,.1)}
+.ring .fg{stroke:var(--accent);transition:stroke-dashoffset .12s linear}
+
+.ring-label{
+    position:absolute;
+    font-size:12px;
+    color:var(--accent);
+    font-weight:600;
+    letter-spacing:.5px;
+    opacity:0;
+    transition:opacity .35s;
+}
+
+.app.wait .ring-label{opacity:1}
+
+/* ============ ผลตัดสิน ============ */
 
 #verdict{
     position:absolute;
     left:0;right:0;bottom:0;
-    padding:18px 20px;
-    background:rgba(15,23,42,.92);
-    backdrop-filter:blur(4px);
+    padding:20px 22px;
+    background:linear-gradient(0deg,rgba(5,8,15,.96),rgba(5,8,15,.75) 65%,transparent);
     display:none;
 }
 
-#verdict.show{display:block}
+#verdict.show{display:block;animation:slideup .45s var(--spring) both}
+
+@keyframes slideup{
+    from{opacity:0;transform:translateY(26px)}
+    to{opacity:1;transform:none}
+}
 
 #verdict .big{
-    font-size:26px;
-    font-weight:700;
+    font-size:30px;
+    font-weight:800;
+    letter-spacing:-.6px;
     display:flex;
     align-items:center;
-    gap:10px;
+    gap:12px;
 }
 
 #verdict .detail{
     color:var(--muted);
-    font-size:14px;
-    margin-top:6px;
+    font-size:13.5px;
+    margin-top:7px;
+    letter-spacing:.2px;
 }
 
-#verdict.pass .big{color:var(--pass)}
-#verdict.fail .big{color:var(--fail)}
-#verdict.wait .big{color:var(--wait);font-size:20px}
+.app.pass #verdict .big{color:var(--pass);text-shadow:0 0 26px rgba(34,224,127,.5)}
+.app.fail #verdict .big{color:var(--fail);text-shadow:0 0 26px rgba(255,77,94,.5)}
+.app.wait #verdict .big{color:var(--wait);font-size:19px;font-weight:600}
 
-/* แถบ dwell time */
-#hold{
-    position:absolute;
-    top:0;left:0;
-    height:5px;
-    width:0%;
-    background:var(--accent);
-    transition:width .1s linear;
+.app.fail #verdict .big .mark{animation:shake .5s var(--ease)}
+
+@keyframes shake{
+    0%,100%{transform:translateX(0)}
+    20%{transform:translateX(-7px)}
+    40%{transform:translateX(7px)}
+    60%{transform:translateX(-4px)}
+    80%{transform:translateX(4px)}
 }
 
-/* ---------- ปุ่ม ---------- */
+.app.pass #verdict .big .mark{animation:pop .5s var(--spring)}
 
-.controls{
-    display:flex;
-    gap:10px;
-    flex-wrap:wrap;
-    margin-top:16px;
+@keyframes pop{
+    0%{transform:scale(0) rotate(-40deg)}
+    100%{transform:scale(1) rotate(0)}
 }
+
+/* ============ ปุ่ม ============ */
+
+.controls{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
 
 button{
-    background:var(--accent);
-    color:#0f172a;
+    font-family:inherit;
+    background:linear-gradient(135deg,var(--accent),#1ba8d4);
+    color:#04121a;
     border:none;
-    padding:12px 20px;
-    font-size:15px;
-    font-weight:600;
-    border-radius:10px;
+    padding:13px 24px;
+    font-size:14.5px;
+    font-weight:700;
+    border-radius:12px;
     cursor:pointer;
-    transition:.2s;
+    position:relative;
+    overflow:hidden;
+    transition:transform .18s var(--spring),box-shadow .25s var(--ease),opacity .2s;
+    box-shadow:0 5px 20px rgba(61,219,255,.24);
 }
 
-button:hover:not(:disabled){filter:brightness(1.12)}
-button:disabled{opacity:.4;cursor:not-allowed}
+button::after{
+    content:"";
+    position:absolute;inset:0;
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,.32),transparent);
+    transform:translateX(-100%);
+}
+
+button:hover:not(:disabled)::after{animation:sheen .7s var(--ease)}
+
+@keyframes sheen{to{transform:translateX(100%)}}
+
+button:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 9px 26px rgba(61,219,255,.36)}
+button:active:not(:disabled){transform:translateY(0) scale(.97)}
+button:disabled{opacity:.35;cursor:not-allowed;box-shadow:none}
 
 button.ghost{
-    background:transparent;
+    background:rgba(255,255,255,.04);
     color:var(--text);
-    border:1px solid var(--line);
+    border:1px solid var(--line-strong);
+    box-shadow:none;
 }
 
-button.ghost.on{border-color:var(--accent);color:var(--accent)}
+button.ghost:hover:not(:disabled){background:rgba(255,255,255,.09);box-shadow:0 5px 18px rgba(0,0,0,.3)}
+button.ghost.on{border-color:var(--accent);color:var(--accent);background:rgba(61,219,255,.09)}
 
-button.danger{background:transparent;color:var(--fail);border:1px solid var(--fail)}
+button.danger{background:rgba(255,77,94,.1);color:var(--fail);border:1px solid rgba(255,77,94,.35);box-shadow:none}
+button.danger:hover:not(:disabled){background:rgba(255,77,94,.19)}
 
-/* ---------- ผลดิบ ---------- */
+button.sm{padding:10px 16px;font-size:13px;border-radius:10px}
 
-.result-item{margin:14px 0}
+/* ============ ช่องกรอก URL โมเดล ============ */
+
+.field{display:flex;gap:9px;flex-wrap:wrap}
+
+input[type=text]{
+    flex:1;
+    min-width:210px;
+    font-family:'Consolas',ui-monospace,monospace;
+    font-size:12.5px;
+    background:rgba(0,0,0,.32);
+    border:1px solid var(--line-strong);
+    color:var(--text);
+    padding:12px 14px;
+    border-radius:11px;
+    transition:border-color .25s,box-shadow .25s;
+}
+
+input[type=text]:focus{
+    outline:none;
+    border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(61,219,255,.14);
+}
+
+input[type=text]::placeholder{color:var(--dim)}
+
+.hint{font-size:11.5px;color:var(--dim);margin-top:10px;line-height:1.75}
+
+/* ============ แถบความมั่นใจ ============ */
+
+.result-item{margin-bottom:16px;animation:rise .4s var(--ease) both}
+.result-item:last-child{margin-bottom:0}
 
 .result-header{
     display:flex;
     justify-content:space-between;
-    font-size:14px;
-    margin-bottom:6px;
+    font-size:13.5px;
+    margin-bottom:8px;
+    font-weight:500;
 }
+
+.result-header b{font-variant-numeric:tabular-nums;font-weight:700}
 
 .progress{
     width:100%;
-    background:#0f172a;
-    height:12px;
-    border-radius:6px;
+    background:rgba(0,0,0,.35);
+    height:9px;
+    border-radius:99px;
     overflow:hidden;
 }
 
 .bar{
     height:100%;
     width:0%;
-    border-radius:6px;
-    transition:width .25s;
+    border-radius:99px;
+    transition:width .32s var(--ease),background .3s;
+    background:linear-gradient(90deg,#475569,#64748b);
 }
 
-.bar.pass{background:var(--pass)}
-.bar.fail{background:var(--fail)}
+.bar.pass{background:linear-gradient(90deg,#12b866,var(--pass));box-shadow:0 0 14px rgba(34,224,127,.5)}
+.bar.fail{background:linear-gradient(90deg,#d92b3d,var(--fail));box-shadow:0 0 14px rgba(255,77,94,.5)}
 
-/* ---------- ตั้งค่า ---------- */
+/* ============ สไลเดอร์ ============ */
 
-.setting{margin:16px 0}
+.setting{margin-bottom:20px}
+.setting:last-child{margin-bottom:0}
 
 .setting label{
     display:flex;
     justify-content:space-between;
-    font-size:14px;
+    align-items:baseline;
+    font-size:13.5px;
     color:var(--muted);
-    margin-bottom:8px;
+    margin-bottom:11px;
 }
 
-.setting label b{color:var(--accent)}
-
-input[type=range]{width:100%;accent-color:var(--accent)}
-
-.hint{
-    font-size:12px;
-    color:#64748b;
-    margin-top:6px;
-    line-height:1.6;
+.setting label b{
+    color:var(--accent);
+    font-size:15px;
+    font-variant-numeric:tabular-nums;
 }
 
-/* ---------- สถิติ ---------- */
+input[type=range]{
+    width:100%;
+    height:5px;
+    -webkit-appearance:none;
+    appearance:none;
+    background:rgba(0,0,0,.4);
+    border-radius:99px;
+    cursor:pointer;
+}
+
+input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    appearance:none;
+    width:17px;height:17px;
+    border-radius:50%;
+    background:var(--accent);
+    box-shadow:0 0 12px rgba(61,219,255,.65);
+    cursor:pointer;
+    transition:transform .18s var(--spring);
+}
+
+input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.22)}
+
+input[type=range]::-moz-range-thumb{
+    width:17px;height:17px;border:none;
+    border-radius:50%;
+    background:var(--accent);
+    box-shadow:0 0 12px rgba(61,219,255,.65);
+    cursor:pointer;
+}
+
+/* ============ สถิติ ============ */
 
 .stats{
     display:grid;
     grid-template-columns:repeat(4,1fr);
-    gap:10px;
-    margin-bottom:18px;
+    gap:12px;
+    margin-bottom:20px;
 }
 
 .stat{
-    background:#0f172a;
+    background:rgba(0,0,0,.26);
     border:1px solid var(--line);
-    border-radius:10px;
-    padding:12px 10px;
+    border-radius:15px;
+    padding:16px 12px;
     text-align:center;
+    transition:transform .25s var(--spring),border-color .25s;
 }
 
-.stat .num{font-size:24px;font-weight:700}
-.stat .lbl{font-size:11px;color:var(--muted);margin-top:4px}
+.stat:hover{transform:translateY(-3px);border-color:var(--line-strong)}
+
+.stat .num{
+    font-size:30px;
+    font-weight:800;
+    letter-spacing:-1px;
+    font-variant-numeric:tabular-nums;
+    line-height:1.1;
+}
+
+.stat .lbl{font-size:11px;color:var(--dim);margin-top:6px;letter-spacing:.4px}
 
 .stat.pass .num{color:var(--pass)}
 .stat.fail .num{color:var(--fail)}
+.stat.rate .num{color:var(--accent)}
 
-/* ---------- ตาราง ---------- */
+/* ============ ตาราง ============ */
 
-.table-wrap{max-height:260px;overflow-y:auto;overflow-x:auto}
+.table-wrap{
+    max-height:290px;
+    overflow:auto;
+    border-radius:13px;
+    border:1px solid var(--line);
+}
 
-table{width:100%;border-collapse:collapse;font-size:13px}
+.table-wrap::-webkit-scrollbar{width:8px;height:8px}
+.table-wrap::-webkit-scrollbar-track{background:rgba(0,0,0,.2)}
+.table-wrap::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:99px}
+
+table{width:100%;border-collapse:collapse;font-size:12.5px}
 
 th{
     text-align:left;
-    color:var(--muted);
+    color:var(--dim);
     font-weight:600;
-    padding:8px;
-    border-bottom:1px solid var(--line);
+    font-size:11px;
+    letter-spacing:.7px;
+    text-transform:uppercase;
+    padding:12px 14px;
     position:sticky;
     top:0;
-    background:var(--panel);
+    background:var(--panel-solid);
+    border-bottom:1px solid var(--line);
+    white-space:nowrap;
 }
 
-td{padding:8px;border-bottom:1px solid #263449}
+td{padding:11px 14px;border-bottom:1px solid rgba(148,163,184,.07);white-space:nowrap}
+
+tbody tr{transition:background .2s}
+tbody tr:hover{background:rgba(255,255,255,.03)}
+tbody tr:first-child{animation:rowin .45s var(--spring) both}
+
+@keyframes rowin{
+    from{opacity:0;transform:translateX(-14px)}
+    to{opacity:1;transform:none}
+}
 
 td.pass{color:var(--pass);font-weight:600}
 td.fail{color:var(--fail);font-weight:600}
 
-.empty{color:#475569;text-align:center;padding:24px;font-size:14px}
+.empty{color:var(--dim);text-align:center;padding:34px;font-size:13.5px}
 
-.store-status{
-    display:flex;
-    align-items:center;
-    font-size:12px;
-    color:#64748b;
-    margin-left:auto;
-}
+.store-status{display:flex;align-items:center;font-size:11.5px;color:var(--dim);margin-left:auto}
 
-/* ---------- โซนวางรูป ---------- */
+/* ============ โซนวางรูป ============ */
 
 #drop-zone{
-    margin-top:16px;
-    padding:18px;
-    border:2px dashed var(--line);
-    border-radius:12px;
+    margin-top:14px;
+    padding:17px;
+    border:1.5px dashed var(--line-strong);
+    border-radius:13px;
     color:var(--muted);
-    font-size:13px;
+    font-size:12.5px;
     text-align:center;
     cursor:pointer;
-    transition:.2s;
-    line-height:1.7;
+    transition:.28s var(--ease);
+    line-height:1.75;
 }
 
 #drop-zone:hover,#drop-zone.dragover{
     border-color:var(--accent);
     color:var(--accent);
+    background:rgba(61,219,255,.06);
+    transform:scale(1.015);
 }
+
+/* ============ ท้ายเว็บ ============ */
 
 .warn{
-    grid-column:1/-1;
-    background:#422006;
-    border:1px solid #a16207;
-    color:#fde68a;
-    padding:14px 18px;
-    border-radius:12px;
-    font-size:13px;
-    line-height:1.8;
+    background:rgba(255,176,31,.07);
+    border:1px solid rgba(255,176,31,.26);
+    color:#ffe0a3;
+    padding:17px 20px;
+    border-radius:16px;
+    font-size:12.5px;
+    line-height:1.85;
+    margin-top:18px;
 }
 
-.warn b{color:#fef3c7}
+.warn b{color:#fff2d1}
 
 footer{
-    grid-column:1/-1;
     text-align:center;
-    color:#475569;
-    font-size:12px;
-    padding-top:10px;
+    color:var(--dim);
+    font-size:11.5px;
+    padding:26px 0 0;
 }
 
-@media(max-width:860px){
-    .wrap{grid-template-columns:1fr}
+@media(max-width:900px){
+    main{grid-template-columns:1fr}
     .stats{grid-template-columns:repeat(2,1fr)}
+    .brand h1{font-size:21px}
+    #verdict .big{font-size:24px}
+}
+
+/* เคารพผู้ที่ตั้งค่าลดการเคลื่อนไหว — ระบบความปลอดภัยไม่ควรทำให้ใครวิงเวียน */
+@media(prefers-reduced-motion:reduce){
+    *,*::before,*::after{
+        animation-duration:.01ms !important;
+        animation-iteration-count:1 !important;
+        transition-duration:.01ms !important;
+    }
 }
 </style>
 </head>
 
 <body>
 
-<div class="wrap">
+<div class="app" id="app">
+<div class="ambient"></div>
 
 <header>
-    <div>
-        <h1>🦺 SafetyCheck</h1>
-        <div class="sub">ตรวจการสวมเสื้อสะท้อนแสงก่อนเข้าพื้นที่ปฏิบัติงาน</div>
+    <div class="brand">
+        <div class="logo">🦺</div>
+        <div>
+            <h1>SafetyCheck</h1>
+            <p>ตรวจการสวมเสื้อสะท้อนแสงก่อนเข้าพื้นที่ปฏิบัติงาน</p>
+        </div>
     </div>
-    <div class="model-box">
-        <div class="badge" id="model-status">⏳ ยังไม่ได้โหลดโมเดล</div>
-        <button class="tiny ghost" id="checkBtn" onclick="checkForUpdate()">🔄 เช็คอัปเดตโมเดล</button>
-    </div>
+    <div class="pill" id="model-status"><span class="dot"></span><span id="model-text">ยังไม่ได้โหลดโมเดล</span></div>
 </header>
 
-<div id="update-note" class="update-note"></div>
+<div id="update-note" class="note"></div>
 
-<!-- ============ ซ้าย: กล้อง ============ -->
-<div class="panel">
+<main>
+
+<!-- ============ ซ้าย: จุดตรวจ ============ -->
+<section>
+<div class="card">
     <h2>จุดตรวจ</h2>
 
     <div id="stage">
-        <div id="hold"></div>
+        <div class="scanline"></div>
+
+        <svg class="ring" id="ring" viewBox="0 0 120 120">
+            <circle class="bg" cx="60" cy="60" r="52"></circle>
+            <circle class="fg" id="ringFg" cx="60" cy="60" r="52"></circle>
+        </svg>
+        <div class="ring-label" id="ringLabel"></div>
+
         <div id="placeholder">
+            <span class="icon">📷</span>
             กดปุ่ม "เริ่มตรวจ" เพื่อเปิดกล้อง<br>
             แล้วยืนให้เห็นตั้งแต่หัวถึงเอว
         </div>
+
         <div id="verdict">
             <div class="big" id="verdict-text"></div>
             <div class="detail" id="verdict-detail"></div>
@@ -420,15 +726,33 @@ footer{
     </div>
     <input type="file" id="fileInput" accept="image/*" style="display:none">
 </div>
+</section>
 
-<!-- ============ ขวา: ผล + ตั้งค่า ============ -->
-<div class="panel">
-    <h2>ค่าความมั่นใจของโมเดล</h2>
-    <div id="label-container">
-        <div class="empty">รอเริ่มการตรวจ</div>
+<!-- ============ ขวา: โมเดล + ค่าความมั่นใจ + ตั้งค่า ============ -->
+<aside>
+
+<div class="card">
+    <h2>แหล่งโมเดล</h2>
+
+    <div class="field">
+        <input type="text" id="modelUrl" placeholder="https://teachablemachine.withgoogle.com/models/XXXXXXXX/" spellcheck="false">
+        <button class="sm" id="applyBtn" onclick="applyModelUrl()">โหลด</button>
+        <button class="sm ghost" onclick="resetModelUrl()">ค่าเริ่มต้น</button>
     </div>
 
-    <h2 style="margin-top:28px">ตั้งค่าการตัดสิน</h2>
+    <div class="hint">
+        วาง URL จาก Teachable Machine (<b>Export Model → Tensorflow.js → Upload</b>) แล้วกดโหลด<br>
+        ระบบจำ URL ล่าสุดไว้ให้ · วาง URL ที่ลงท้ายด้วย <code>metadata.json</code> ก็ได้ เดี๋ยวตัดให้เอง
+    </div>
+</div>
+
+<div class="card">
+    <h2>ค่าความมั่นใจของโมเดล</h2>
+    <div id="label-container"><div class="empty">รอโหลดโมเดล</div></div>
+</div>
+
+<div class="card">
+    <h2>ตั้งค่าการตัดสิน</h2>
 
     <div class="setting">
         <label>ความมั่นใจขั้นต่ำ <b id="thVal">85%</b></label>
@@ -443,15 +767,18 @@ footer{
     </div>
 </div>
 
+</aside>
+</main>
+
 <!-- ============ สถิติ + ประวัติ ============ -->
-<div class="panel" style="grid-column:1/-1">
+<div class="card" style="margin-top:18px">
     <h2>สรุปผล &amp; ประวัติการตรวจ</h2>
 
     <div class="stats">
         <div class="stat"><div class="num" id="stTotal">0</div><div class="lbl">ตรวจทั้งหมด</div></div>
         <div class="stat pass"><div class="num" id="stPass">0</div><div class="lbl">ผ่าน</div></div>
         <div class="stat fail"><div class="num" id="stFail">0</div><div class="lbl">ไม่ผ่าน</div></div>
-        <div class="stat"><div class="num" id="stRate">–</div><div class="lbl">อัตราผ่าน</div></div>
+        <div class="stat rate"><div class="num" id="stRate">–</div><div class="lbl">อัตราผ่าน</div></div>
     </div>
 
     <div class="table-wrap">
@@ -466,22 +793,30 @@ footer{
     </div>
 
     <div class="controls">
-        <button class="ghost" onclick="exportCSV()">⬇ ดาวน์โหลด CSV</button>
-        <button class="danger" onclick="clearLog()">🗑 ล้างประวัติ</button>
+        <button class="ghost sm" onclick="exportCSV()">⬇ ดาวน์โหลด CSV</button>
+        <button class="danger sm" onclick="clearLog()">🗑 ล้างประวัติ</button>
         <span id="store-status" class="store-status">💾 บันทึกไว้ในเครื่องแล้ว 0 รายการ</span>
     </div>
 </div>
 
-<footer>Powered by Google Teachable Machine · TensorFlow.js</footer>
+<div class="warn">
+    <b>⚠️ ข้อจำกัดที่ต้องรู้:</b> โมเดลตั้งต้นเทรนไว้ 2 คลาส (<code>yes</code> / <code>no</code>) ยังไม่มีคลาส "ไม่มีคน"
+    ทำให้ตอนไม่มีใครยืนหน้ากล้อง ระบบยังถูกบังคับให้เลือกคำตอบอยู่ดี —
+    บรรเทาด้วยค่าความมั่นใจขั้นต่ำและการยืนนิ่งต่อเนื่องแล้ว แต่วิธีแก้ที่ต้นเหตุคือ<b>เพิ่มคลาสที่ 3 "ไม่มีคน"</b> แล้วเทรนใหม่
+    <br>
+    ระบบนี้เป็น<b>เครื่องช่วยเตือนและเก็บสถิติ ไม่ใช่ด่านความปลอดภัยด่านเดียว</b> — ควรมีเจ้าหน้าที่ความปลอดภัยกำกับเสมอ
+</div>
+
+<footer>Powered by Google Teachable Machine · TensorFlow.js · ประมวลผลในเบราว์เซอร์ ภาพไม่ถูกส่งออกจากเครื่อง</footer>
 
 </div>
 
 <script>
 /* ============================================================
-   ตั้งค่าโมเดล
+   ตั้งค่า
    ============================================================ */
 
-const MODEL_URL = "https://teachablemachine.withgoogle.com/models/dU1UGTjBZ/";
+const DEFAULT_MODEL_URL = "https://teachablemachine.withgoogle.com/models/dU1UGTjBZ/";
 
 // แปลงชื่อคลาสดิบจาก Teachable Machine เป็นข้อความภาษาไทย
 const LABELS = {
@@ -490,7 +825,7 @@ const LABELS = {
 };
 
 function labelInfo(raw){
-    return LABELS[raw.trim().toLowerCase()] || { th:raw, pass:false };
+    return LABELS[String(raw).trim().toLowerCase()] || { th:raw, pass:false };
 }
 
 /* ============================================================
@@ -499,6 +834,8 @@ function labelInfo(raw){
 
 let model, webcam, maxPredictions;
 let loadedMeta = null;    // metadata ของโมเดลที่โหลดอยู่จริง ใช้บอกเวอร์ชัน
+let modelUrl   = DEFAULT_MODEL_URL;
+
 let running     = false;
 let soundOn     = true;
 
@@ -515,9 +852,87 @@ let seq = 0;              // เลขลำดับการตรวจแบ
 
 const STORE_KEY = "safetycheck.log.v1";
 const SEQ_KEY   = "safetycheck.seq.v1";
+const URL_KEY   = "safetycheck.modelurl.v1";
 const MAX_ROWS  = 100;    // เก็บสูงสุดกี่รายการ เกินนี้ตัดของเก่าทิ้ง
 
+const RING_LEN  = 2 * Math.PI * 52;   // เส้นรอบวงของวงแหวนนับเวลา
+
 const $ = id => document.getElementById(id);
+
+/* ============================================================
+   URL ของโมเดล
+   ============================================================ */
+
+// รับ URL ได้หลายรูปแบบ แล้วปรับให้อยู่ในรูปที่ tmImage ใช้ได้ (ลงท้ายด้วย /)
+function normalizeModelUrl(raw){
+    let u = String(raw || "").trim();
+    if(!u) return "";
+
+    // คนมักก๊อป URL ที่ลงท้ายด้วย model.json หรือ metadata.json มาด้วย
+    u = u.replace(/(model|metadata)\.json.*$/i, "");
+
+    if(!/^https?:\/\//i.test(u)) return "";
+    if(!u.endsWith("/")) u += "/";
+
+    return u;
+}
+
+function loadSavedUrl(){
+    try{
+        const saved = localStorage.getItem(URL_KEY);
+        if(saved) modelUrl = saved;
+    }catch(e){ /* localStorage ปิดอยู่ — ใช้ค่าตั้งต้น */ }
+
+    $("modelUrl").value = modelUrl;
+}
+
+async function applyModelUrl(){
+    const normalized = normalizeModelUrl($("modelUrl").value);
+
+    if(!normalized){
+        setNote("❌ URL ไม่ถูกต้อง — ต้องขึ้นต้นด้วย https:// และเป็นลิงก์จาก Teachable Machine", "err");
+        return;
+    }
+
+    const btn = $("applyBtn");
+    btn.disabled  = true;
+    btn.innerHTML = "⏳";
+
+    stopCamera();
+
+    const previous = modelUrl;
+
+    modelUrl   = normalized;
+    model      = null;      // บังคับให้ loadModel โหลดใหม่
+    loadedMeta = null;
+
+    try{
+        await loadModel();
+
+        try{ localStorage.setItem(URL_KEY, modelUrl); }catch(e){ /* ข้าม */ }
+
+        $("modelUrl").value = modelUrl;
+        setNote("✅ โหลดโมเดลใหม่สำเร็จ — เวอร์ชัน " + fmtTime(loadedMeta && loadedMeta.timeStamp), "ok");
+
+        warnUnknownLabels(loadedMeta && loadedMeta.labels);
+    }catch(e){
+        // โหลดไม่ผ่าน — ถอยกลับไปใช้ตัวเดิม จะได้ไม่ค้างในสภาพใช้งานไม่ได้
+        modelUrl   = previous;
+        model      = null;
+        loadedMeta = null;
+
+        setNote("❌ โหลดโมเดลไม่สำเร็จ: " + e.message + " — ตรวจว่า URL ถูกต้องและกด Upload ใน Teachable Machine แล้ว", "err");
+        setPill("error", "โหลดโมเดลไม่สำเร็จ");
+    }
+
+    btn.disabled  = false;
+    btn.innerHTML = "โหลด";
+}
+
+function resetModelUrl(){
+    $("modelUrl").value = DEFAULT_MODEL_URL;
+    applyModelUrl();
+}
 
 /* ============================================================
    โหลดโมเดล
@@ -526,29 +941,44 @@ const $ = id => document.getElementById(id);
 async function loadModel(){
     if(model) return;
 
-    $("model-status").innerHTML = "⏳ กำลังโหลดโมเดล...";
+    setPill("loading", "กำลังโหลดโมเดล...");
 
-    // อ่าน metadata แบบไม่กันแคช เพื่อให้ได้ไฟล์ชุดเดียวกับที่ไลบรารีใช้จริง
-    // (ถ้าไปดึงของสดมาแสดง จะกลายเป็นบอกเวอร์ชันใหม่ทั้งที่โมเดลที่ใช้อยู่เป็นตัวเก่าจากแคช)
+    // อ่าน metadata ผ่านแคชปกติ เพื่อให้เวอร์ชันที่แสดงตรงกับโมเดลที่ใช้จริง
+    // (ถ้าไปดึงของสด จะกลายเป็นบอกเวอร์ชันใหม่ทั้งที่ยังทำนายด้วยโมเดลเก่าจากแคช)
     try{
-        const res = await fetch(MODEL_URL + "metadata.json");
+        const res = await fetch(modelUrl + "metadata.json");
         loadedMeta = await res.json();
     }catch(e){
         console.warn("อ่าน metadata ไม่ได้:", e);
         loadedMeta = null;
     }
 
-    model = await tmImage.load(MODEL_URL + "model.json", MODEL_URL + "metadata.json");
+    model = await tmImage.load(modelUrl + "model.json", modelUrl + "metadata.json");
     maxPredictions = model.getTotalClasses();
 
     buildBars();
     showModelInfo();
 }
 
+function buildBars(){
+    const box = $("label-container");
+    box.innerHTML = "";
+
+    for(let i = 0; i < maxPredictions; i++){
+        const div = document.createElement("div");
+        div.className = "result-item";
+        div.style.animationDelay = (i * 0.07) + "s";
+        div.innerHTML =
+            '<div class="result-header"><span>—</span><b>0%</b></div>' +
+            '<div class="progress"><div class="bar"></div></div>';
+        box.appendChild(div);
+    }
+}
+
 /* ------------------------------------------------------------
    ตัวบอกเวอร์ชันโมเดล
-   Teachable Machine ไม่ได้ซิงก์โมเดลให้อัตโนมัติ — เทรนใหม่แล้วต้องกด
-   Export → Upload ซ้ำ ส่วนนี้จึงมีไว้ให้เห็นด้วยตาว่ากำลังใช้โมเดลตัวไหน
+   Teachable Machine ไม่ซิงก์ให้อัตโนมัติ และมักสร้าง URL ใหม่ทุกครั้งที่อัปโหลด
+   ส่วนนี้จึงมีไว้ให้เห็นด้วยตาว่ากำลังใช้โมเดลตัวไหน
    ------------------------------------------------------------ */
 
 function fmtTime(iso){
@@ -563,16 +993,22 @@ function fmtTime(iso){
     });
 }
 
+function setPill(kind, text){
+    $("model-status").className = "pill " + (kind || "");
+    $("model-text").innerHTML   = text;
+}
+
 function showModelInfo(){
     if(!loadedMeta){
-        $("model-status").innerHTML = "✅ พร้อมใช้งาน · " + maxPredictions + " คลาส · ไม่ทราบเวอร์ชัน";
+        setPill("ready", "พร้อมใช้งาน · " + maxPredictions + " คลาส · ไม่ทราบเวอร์ชัน");
         return;
     }
 
-    $("model-status").innerHTML =
-        "✅ " + (loadedMeta.modelName || "โมเดล") +
+    setPill("ready",
+        (loadedMeta.modelName || "โมเดล") +
         " · " + maxPredictions + " คลาส" +
-        " · เวอร์ชัน " + fmtTime(loadedMeta.timeStamp);
+        " · " + fmtTime(loadedMeta.timeStamp)
+    );
 
     warnUnknownLabels(loadedMeta.labels);
 }
@@ -584,60 +1020,16 @@ function warnUnknownLabels(labels){
     const unknown = labels.filter(l => !LABELS[String(l).trim().toLowerCase()]);
     if(!unknown.length) return;
 
-    setUpdateNote(
-        "⚠️ โมเดลมีคลาสที่โค้ดยังไม่รู้จัก: " + unknown.join(", ") +
+    setNote(
+        "⚠️ โมเดลมีคลาสที่โค้ดยังไม่รู้จัก: <b>" + unknown.join(", ") + "</b>" +
         " — ต้องเพิ่มใน LABELS ไม่งั้นระบบจะนับเป็น \"ไม่ผ่าน\"", "warn"
     );
 }
 
-function setUpdateNote(msg, kind){
+function setNote(msg, kind){
     const el = $("update-note");
-
     el.innerHTML = msg;
-    el.className = "update-note show " + (kind || "");
-}
-
-// เทียบเวอร์ชันที่โหลดอยู่ กับตัวล่าสุดบนเซิร์ฟเวอร์ (ดึงสดโดยข้ามแคช)
-async function checkForUpdate(){
-    const btn = $("checkBtn");
-
-    btn.disabled  = true;
-    btn.innerHTML = "⏳ กำลังเช็ค...";
-
-    try{
-        const res   = await fetch(MODEL_URL + "metadata.json?t=" + Date.now(), { cache:"no-store" });
-        const fresh = await res.json();
-
-        if(!loadedMeta){
-            setUpdateNote("โหลดโมเดลให้เสร็จก่อน แล้วค่อยเช็คอัปเดต", "warn");
-        }else if(fresh.timeStamp === loadedMeta.timeStamp){
-            setUpdateNote("✅ ใช้โมเดลเวอร์ชันล่าสุดแล้ว (" + fmtTime(fresh.timeStamp) + ")", "ok");
-        }else{
-            setUpdateNote(
-                "🔔 มีโมเดลใหม่บนคลาวด์! เวอร์ชัน " + fmtTime(fresh.timeStamp) +
-                " (ที่ใช้อยู่: " + fmtTime(loadedMeta.timeStamp) + ") — กด Ctrl+Shift+R เพื่อโหลดใหม่", "warn"
-            );
-        }
-    }catch(e){
-        setUpdateNote("❌ เช็คอัปเดตไม่สำเร็จ: " + e.message, "warn");
-    }
-
-    btn.disabled  = false;
-    btn.innerHTML = "🔄 เช็คอัปเดตโมเดล";
-}
-
-function buildBars(){
-    const box = $("label-container");
-    box.innerHTML = "";
-
-    for(let i = 0; i < maxPredictions; i++){
-        const div = document.createElement("div");
-        div.className = "result-item";
-        div.innerHTML =
-            '<div class="result-header"><span>—</span><span>0%</span></div>' +
-            '<div class="progress"><div class="bar"></div></div>';
-        box.appendChild(div);
-    }
+    el.className = "note show " + (kind || "");
 }
 
 /* ============================================================
@@ -646,7 +1038,7 @@ function buildBars(){
 
 async function startCamera(){
     $("startBtn").disabled = true;
-    $("startBtn").innerHTML = "กำลังเปิดกล้อง...";
+    $("startBtn").innerHTML = "⏳ กำลังเปิดกล้อง...";
 
     try{
         await loadModel();
@@ -657,9 +1049,10 @@ async function startCamera(){
         await webcam.setup();
         await webcam.play();
     }catch(err){
-        alert("เปิดกล้องไม่สำเร็จ: " + err.message +
-              "\n\nหมายเหตุ: กล้องต้องเปิดผ่าน http://localhost หรือ https:// เท่านั้น");
-        $("startBtn").disabled = false;
+        setNote("❌ เปิดกล้องไม่สำเร็จ: " + err.message +
+                " · กล้องต้องเปิดผ่าน https:// หรือ http://localhost เท่านั้น", "err");
+
+        $("startBtn").disabled  = false;
         $("startBtn").innerHTML = "▶ เริ่มตรวจ";
         return;
     }
@@ -670,7 +1063,7 @@ async function startCamera(){
     running = true;
     resetDecision();
 
-    $("stopBtn").disabled = false;
+    $("stopBtn").disabled   = false;
     $("startBtn").innerHTML = "▶ เริ่มตรวจ";
 
     window.requestAnimationFrame(loop);
@@ -689,8 +1082,10 @@ function stopCamera(){
     $("stopBtn").disabled  = true;
 
     resetDecision();
-    setStage(null);
+    setState(null);
+
     $("verdict").className = "";
+    $("ring").classList.remove("on");
 }
 
 function toggleSound(){
@@ -724,7 +1119,7 @@ function decide(predictions){
 
     // ยังอยู่ในช่วงแสดงผลของคนก่อนหน้า — ไม่ตรวจซ้ำ
     if(now < lockUntil){
-        $("hold").style.width = "0%";
+        setRing(0, false);
         return;
     }
 
@@ -733,7 +1128,7 @@ function decide(predictions){
     // ความมั่นใจไม่พอ → ไม่ตัดสิน
     if(best.probability < threshold){
         candidate = null;
-        $("hold").style.width = "0%";
+        setRing(0, false);
         showWaiting("ยังไม่ชัด — กรุณายืนบนจุดตรวจ ให้เห็นตั้งแต่หัวถึงเอว");
         return;
     }
@@ -745,60 +1140,68 @@ function decide(predictions){
     }
 
     const held = now - candidateAt;
-    $("hold").style.width = Math.min(100, held / dwellMs * 100) + "%";
 
     if(held < dwellMs){
-        const info = labelInfo(best.className);
-        showWaiting("กำลังตรวจสอบ... (" + info.th + ")");
+        setRing(held / dwellMs, true);
+        showWaiting("กำลังตรวจสอบ... (" + labelInfo(best.className).th + ")");
         return;
     }
 
     // นิ่งครบเวลา → ตัดสิน
+    setRing(1, false);
     commit(best, "กล้อง");
+
     lockUntil = now + COOLDOWN;
     candidate = null;
-    $("hold").style.width = "0%";
 }
 
 function resetDecision(){
     candidate = null;
     lockUntil = 0;
-    $("hold").style.width = "0%";
+    setRing(0, false);
     showWaiting("กำลังรอผู้เข้าพื้นที่...");
+}
+
+function setRing(progress, visible){
+    const p = Math.max(0, Math.min(1, progress));
+
+    $("ringFg").style.strokeDasharray  = RING_LEN;
+    $("ringFg").style.strokeDashoffset = RING_LEN * (1 - p);
+
+    $("ring").classList.toggle("on", !!visible);
+    $("ringLabel").innerHTML = visible ? Math.ceil((1 - p) * dwellMs / 1000) + " วิ" : "";
 }
 
 /* ============================================================
    แสดงผล
    ============================================================ */
 
-function setStage(mode){
-    $("stage").className = mode || "";
+function setState(mode){
+    $("app").className = "app " + (mode || "");
 }
 
 function showWaiting(msg){
-    const v = $("verdict");
-    v.className = "show wait";
-    $("verdict-text").innerHTML   = "⏳ " + msg;
+    $("verdict").className     = "show";
+    $("verdict-text").innerHTML   = "<span class='mark'>⏳</span> " + msg;
     $("verdict-detail").innerHTML = "";
-    setStage("wait");
+    setState("wait");
 }
 
 function commit(best, source){
     const info    = labelInfo(best.className);
     const percent = (best.probability * 100).toFixed(1);
 
-    const v = $("verdict");
-    v.className = "show " + (info.pass ? "pass" : "fail");
+    $("verdict").className = "show";
 
     if(info.pass){
-        $("verdict-text").innerHTML   = "✅ ผ่าน — เข้าพื้นที่ได้";
+        $("verdict-text").innerHTML   = "<span class='mark'>✅</span> ผ่าน — เข้าพื้นที่ได้";
         $("verdict-detail").innerHTML = info.th + " · ความมั่นใจ " + percent + "%";
-        setStage("pass");
+        setState("pass");
         speak("ผ่าน เชิญเข้าพื้นที่ได้");
     }else{
-        $("verdict-text").innerHTML   = "⛔ ไม่ผ่าน — ห้ามเข้าพื้นที่";
+        $("verdict-text").innerHTML   = "<span class='mark'>⛔</span> ไม่ผ่าน — ห้ามเข้าพื้นที่";
         $("verdict-detail").innerHTML = "กรุณาสวมเสื้อสะท้อนแสง · ความมั่นใจ " + percent + "%";
-        setStage("fail");
+        setState("fail");
         beep();
         speak("ไม่ผ่าน กรุณาสวมเสื้อสะท้อนแสงก่อนเข้าพื้นที่");
     }
@@ -817,8 +1220,8 @@ function drawBars(predictions){
 
         if(!item) continue;
 
-        item.querySelector("span:nth-child(1)").innerHTML = info.th;
-        item.querySelector("span:nth-child(2)").innerHTML = percent + "%";
+        item.querySelector("span").innerHTML = info.th;
+        item.querySelector("b").innerHTML    = percent + "%";
 
         const bar = item.querySelector(".bar");
         bar.style.width = percent + "%";
@@ -836,8 +1239,8 @@ function speak(text){
     speechSynthesis.cancel();
 
     const u = new SpeechSynthesisUtterance(text);
-    u.lang  = "th-TH";
-    u.rate  = 1.0;
+    u.lang = "th-TH";
+    u.rate = 1.0;
     speechSynthesis.speak(u);
 }
 
@@ -868,10 +1271,6 @@ function beep(){
    ประวัติ + สถิติ
    ============================================================ */
 
-/* ------------------------------------------------------------
-   เก็บลง localStorage — ข้อมูลอยู่ในเครื่องนี้เท่านั้น ไม่ส่งไปไหน
-   ------------------------------------------------------------ */
-
 function loadStore(){
     try{
         const raw = localStorage.getItem(STORE_KEY);
@@ -880,10 +1279,8 @@ function loadStore(){
         log = Array.isArray(arr) ? arr : [];
         seq = parseInt(localStorage.getItem(SEQ_KEY), 10) || 0;
 
-        // กันกรณีข้อมูลเก่าไม่มีเลขลำดับ หรือ SEQ_KEY หาย
         if(!seq && log.length) seq = log[0].no || log.length;
     }catch(e){
-        // ข้อมูลเสียหรือเบราว์เซอร์ปิด localStorage — เริ่มใหม่จากศูนย์
         console.warn("อ่านประวัติเดิมไม่ได้:", e);
         log = [];
         seq = 0;
@@ -898,7 +1295,6 @@ function saveStore(){
         localStorage.setItem(SEQ_KEY, String(seq));
         setStoreStatus(true);
     }catch(e){
-        // โควตาเต็ม (หรือโหมดส่วนตัว) — ตัดของเก่าครึ่งหนึ่งแล้วลองใหม่หนึ่งครั้ง
         console.warn("บันทึกไม่สำเร็จ:", e);
 
         log = log.slice(0, Math.floor(log.length / 2));
@@ -943,6 +1339,29 @@ function addLog(info, percent, source){
     renderLog();
 }
 
+// นับเลขไต่ขึ้นแทนการกระโดด ทำให้เห็นว่าตัวเลขเปลี่ยน
+function countTo(el, to){
+    const from = parseInt(el.dataset.v || "0", 10) || 0;
+
+    el.dataset.v = to;
+
+    if(from === to){ el.textContent = to; return; }
+
+    const start = performance.now();
+    const dur   = 420;
+
+    function step(now){
+        const p     = Math.min(1, (now - start) / dur);
+        const eased = 1 - Math.pow(1 - p, 3);
+
+        el.textContent = Math.round(from + (to - from) * eased);
+
+        if(p < 1) requestAnimationFrame(step);
+    }
+
+    requestAnimationFrame(step);
+}
+
 function renderLog(){
     const body = $("logBody");
 
@@ -966,10 +1385,11 @@ function renderLog(){
     const total = log.length;
     const pass  = log.filter(r => r.pass).length;
 
-    $("stTotal").innerHTML = total;
-    $("stPass").innerHTML  = pass;
-    $("stFail").innerHTML  = total - pass;
-    $("stRate").innerHTML  = total ? Math.round(pass / total * 100) + "%" : "–";
+    countTo($("stTotal"), total);
+    countTo($("stPass"),  pass);
+    countTo($("stFail"),  total - pass);
+
+    $("stRate").innerHTML = total ? Math.round(pass / total * 100) + "%" : "–";
 }
 
 function clearLog(){
@@ -988,7 +1408,7 @@ function clearLog(){
 }
 
 function exportCSV(){
-    if(!log.length){ alert("ยังไม่มีข้อมูลให้ดาวน์โหลด"); return; }
+    if(!log.length){ setNote("ยังไม่มีข้อมูลให้ดาวน์โหลด", "warn"); return; }
 
     const rows = [["ลำดับ","วันที่","เวลา","ผลการตรวจ","รายละเอียด","ความมั่นใจ(%)","ที่มา"]];
 
@@ -1015,7 +1435,13 @@ async function analyzeFile(file){
     if(!file || !file.type.startsWith("image/")) return;
 
     stopCamera();
-    await loadModel();
+
+    try{
+        await loadModel();
+    }catch(e){
+        setNote("❌ โหลดโมเดลไม่สำเร็จ: " + e.message, "err");
+        return;
+    }
 
     const img = new Image();
 
@@ -1028,7 +1454,6 @@ async function analyzeFile(file){
         $("stage").appendChild(img);
 
         const predictions = await model.predict(img);
-
         drawBars(predictions);
 
         const best = predictions.reduce((a, b) => b.probability > a.probability ? b : a);
@@ -1084,21 +1509,31 @@ $("dwSlider").addEventListener("input", e => {
     $("dwVal").innerHTML = (dwellMs / 1000).toFixed(1) + " วิ";
 });
 
+// กด Enter ในช่อง URL = กดปุ่มโหลด
+$("modelUrl").addEventListener("keydown", e => {
+    if(e.key === "Enter") applyModelUrl();
+});
+
 // เว้นวรรค = ข้าม cooldown ไปตรวจคนถัดไปทันที
 document.addEventListener("keydown", e => {
-    if(e.code === "Space" && running){
+    if(e.code === "Space" && running && e.target.tagName !== "INPUT"){
         e.preventDefault();
         lockUntil = 0;
         candidate = null;
     }
 });
 
-// ดึงประวัติเดิมกลับมาก่อน แล้วค่อยโหลดโมเดลล่วงหน้า จะได้กดเริ่มแล้วตรวจได้เลย
+/* ============================================================
+   เริ่มทำงาน
+   ============================================================ */
+
+loadSavedUrl();
 loadStore();
 
 loadModel().catch(err => {
-    $("model-status").innerHTML = "❌ โหลดโมเดลไม่สำเร็จ";
     console.error(err);
+    setPill("error", "โหลดโมเดลไม่สำเร็จ");
+    setNote("❌ โหลดโมเดลตั้งต้นไม่สำเร็จ — ลองวาง URL โมเดลของคุณในช่อง \"แหล่งโมเดล\" แล้วกดโหลด", "err");
 });
 </script>
 
