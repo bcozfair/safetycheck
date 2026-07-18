@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SafetyCheck — ตรวจเสื้อสะท้อนแสงก่อนเข้าพื้นที่</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',Tahoma,sans-serif}
+
+:root{
+    --bg:#0f172a;
+    --panel:#1e293b;
+    --line:#334155;
+    --text:#e2e8f0;
+    --muted:#94a3b8;
+    --pass:#22c55e;
+    --fail:#ef4444;
+    --wait:#f59e0b;
+    --accent:#38bdf8;
+}
+
+body{
+    background:var(--bg);
+    color:var(--text);
+    min-height:100vh;
+    padding:20px;
+}
+
+.wrap{
+    max-width:1100px;
+    margin:0 auto;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:20px;
+}
+
+header{
+    grid-column:1/-1;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:12px;
+    padding-bottom:16px;
+    border-bottom:2px solid var(--line);
+}
+
+header h1{font-size:24px;letter-spacing:.5px}
+header .sub{color:var(--muted);font-size:14px;margin-top:4px}
+
+.badge{
+    background:var(--panel);
+    border:1px solid var(--line);
+    padding:8px 14px;
+    border-radius:999px;
+    font-size:13px;
+    color:var(--muted);
+}
+
+.panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:20px;
+}
+
+.panel h2{
+    font-size:15px;
+    text-transform:uppercase;
+    letter-spacing:1px;
+    color:var(--muted);
+    margin-bottom:16px;
+}
+
+/* ---------- กล้อง ---------- */
+
+#stage{
+    position:relative;
+    width:100%;
+    aspect-ratio:1/1;
+    background:#000;
+    border-radius:12px;
+    overflow:hidden;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border:4px solid var(--line);
+    transition:border-color .25s;
+}
+
+#stage.pass{border-color:var(--pass)}
+#stage.fail{border-color:var(--fail)}
+#stage.wait{border-color:var(--wait)}
+
+#stage canvas,#stage img{
+    width:100%;
+    height:100%;
+    object-fit:cover;
+    display:block;
+}
+
+#placeholder{
+    color:#475569;
+    font-size:15px;
+    text-align:center;
+    padding:20px;
+    line-height:1.8;
+}
+
+#verdict{
+    position:absolute;
+    left:0;right:0;bottom:0;
+    padding:18px 20px;
+    background:rgba(15,23,42,.92);
+    backdrop-filter:blur(4px);
+    display:none;
+}
+
+#verdict.show{display:block}
+
+#verdict .big{
+    font-size:26px;
+    font-weight:700;
+    display:flex;
+    align-items:center;
+    gap:10px;
+}
+
+#verdict .detail{
+    color:var(--muted);
+    font-size:14px;
+    margin-top:6px;
+}
+
+#verdict.pass .big{color:var(--pass)}
+#verdict.fail .big{color:var(--fail)}
+#verdict.wait .big{color:var(--wait);font-size:20px}
+
+/* แถบ dwell time */
+#hold{
+    position:absolute;
+    top:0;left:0;
+    height:5px;
+    width:0%;
+    background:var(--accent);
+    transition:width .1s linear;
+}
+
+/* ---------- ปุ่ม ---------- */
+
+.controls{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    margin-top:16px;
+}
+
+button{
+    background:var(--accent);
+    color:#0f172a;
+    border:none;
+    padding:12px 20px;
+    font-size:15px;
+    font-weight:600;
+    border-radius:10px;
+    cursor:pointer;
+    transition:.2s;
+}
+
+button:hover:not(:disabled){filter:brightness(1.12)}
+button:disabled{opacity:.4;cursor:not-allowed}
+
+button.ghost{
+    background:transparent;
+    color:var(--text);
+    border:1px solid var(--line);
+}
+
+button.ghost.on{border-color:var(--accent);color:var(--accent)}
+
+button.danger{background:transparent;color:var(--fail);border:1px solid var(--fail)}
+
+/* ---------- ผลดิบ ---------- */
+
+.result-item{margin:14px 0}
+
+.result-header{
+    display:flex;
+    justify-content:space-between;
+    font-size:14px;
+    margin-bottom:6px;
+}
+
+.progress{
+    width:100%;
+    background:#0f172a;
+    height:12px;
+    border-radius:6px;
+    overflow:hidden;
+}
+
+.bar{
+    height:100%;
+    width:0%;
+    border-radius:6px;
+    transition:width .25s;
+}
+
+.bar.pass{background:var(--pass)}
+.bar.fail{background:var(--fail)}
+
+/* ---------- ตั้งค่า ---------- */
+
+.setting{margin:16px 0}
+
+.setting label{
+    display:flex;
+    justify-content:space-between;
+    font-size:14px;
+    color:var(--muted);
+    margin-bottom:8px;
+}
+
+.setting label b{color:var(--accent)}
+
+input[type=range]{width:100%;accent-color:var(--accent)}
+
+.hint{
+    font-size:12px;
+    color:#64748b;
+    margin-top:6px;
+    line-height:1.6;
+}
+
+/* ---------- สถิติ ---------- */
+
+.stats{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:10px;
+    margin-bottom:18px;
+}
+
+.stat{
+    background:#0f172a;
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:12px 10px;
+    text-align:center;
+}
+
+.stat .num{font-size:24px;font-weight:700}
+.stat .lbl{font-size:11px;color:var(--muted);margin-top:4px}
+
+.stat.pass .num{color:var(--pass)}
+.stat.fail .num{color:var(--fail)}
+
+/* ---------- ตาราง ---------- */
+
+.table-wrap{max-height:260px;overflow-y:auto;overflow-x:auto}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+
+th{
+    text-align:left;
+    color:var(--muted);
+    font-weight:600;
+    padding:8px;
+    border-bottom:1px solid var(--line);
+    position:sticky;
+    top:0;
+    background:var(--panel);
+}
+
+td{padding:8px;border-bottom:1px solid #263449}
+
+td.pass{color:var(--pass);font-weight:600}
+td.fail{color:var(--fail);font-weight:600}
+
+.empty{color:#475569;text-align:center;padding:24px;font-size:14px}
+
+.store-status{
+    display:flex;
+    align-items:center;
+    font-size:12px;
+    color:#64748b;
+    margin-left:auto;
+}
+
+/* ---------- โซนวางรูป ---------- */
+
+#drop-zone{
+    margin-top:16px;
+    padding:18px;
+    border:2px dashed var(--line);
+    border-radius:12px;
+    color:var(--muted);
+    font-size:13px;
+    text-align:center;
+    cursor:pointer;
+    transition:.2s;
+    line-height:1.7;
+}
+
+#drop-zone:hover,#drop-zone.dragover{
+    border-color:var(--accent);
+    color:var(--accent);
+}
+
+.warn{
+    grid-column:1/-1;
+    background:#422006;
+    border:1px solid #a16207;
+    color:#fde68a;
+    padding:14px 18px;
+    border-radius:12px;
+    font-size:13px;
+    line-height:1.8;
+}
+
+.warn b{color:#fef3c7}
+
+footer{
+    grid-column:1/-1;
+    text-align:center;
+    color:#475569;
+    font-size:12px;
+    padding-top:10px;
+}
+
+@media(max-width:860px){
+    .wrap{grid-template-columns:1fr}
+    .stats{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrap">
+
+<header>
+    <div>
+        <h1>🦺 SafetyCheck</h1>
+        <div class="sub">ตรวจการสวมเสื้อสะท้อนแสงก่อนเข้าพื้นที่ปฏิบัติงาน</div>
+    </div>
+    <div class="badge" id="model-status">⏳ ยังไม่ได้โหลดโมเดล</div>
+</header>
+
+<!-- ============ ซ้าย: กล้อง ============ -->
+<div class="panel">
+    <h2>จุดตรวจ</h2>
+
+    <div id="stage">
+        <div id="hold"></div>
+        <div id="placeholder">
+            กดปุ่ม "เริ่มตรวจ" เพื่อเปิดกล้อง<br>
+            แล้วยืนให้เห็นตั้งแต่หัวถึงเอว
+        </div>
+        <div id="verdict">
+            <div class="big" id="verdict-text"></div>
+            <div class="detail" id="verdict-detail"></div>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button id="startBtn" onclick="startCamera()">▶ เริ่มตรวจ</button>
+        <button id="stopBtn" class="ghost" onclick="stopCamera()" disabled>■ หยุด</button>
+        <button id="soundBtn" class="ghost on" onclick="toggleSound()">🔊 เสียง</button>
+    </div>
+
+    <div id="drop-zone" onclick="document.getElementById('fileInput').click()">
+        🖼️ ทดสอบด้วยรูปภาพ — ลากไฟล์มาวาง / คลิกเลือก / กด Ctrl+V
+    </div>
+    <input type="file" id="fileInput" accept="image/*" style="display:none">
+</div>
+
+<!-- ============ ขวา: ผล + ตั้งค่า ============ -->
+<div class="panel">
+    <h2>ค่าความมั่นใจของโมเดล</h2>
+    <div id="label-container">
+        <div class="empty">รอเริ่มการตรวจ</div>
+    </div>
+
+    <h2 style="margin-top:28px">ตั้งค่าการตัดสิน</h2>
+
+    <div class="setting">
+        <label>ความมั่นใจขั้นต่ำ <b id="thVal">85%</b></label>
+        <input type="range" id="thSlider" min="50" max="99" value="85">
+        <div class="hint">ต่ำกว่านี้จะไม่ตัดสิน แต่ขึ้นว่า "ยังไม่ชัด" — กันการเดามั่วตอนภาพไม่ชัดหรือคนยืนไม่เข้าที่</div>
+    </div>
+
+    <div class="setting">
+        <label>ต้องเห็นผลเดิมต่อเนื่อง <b id="dwVal">2.0 วิ</b></label>
+        <input type="range" id="dwSlider" min="5" max="50" value="20">
+        <div class="hint">กันผลกระพริบตอนคนเดินผ่าน — ต้องนิ่งจริงถึงจะบันทึก</div>
+    </div>
+</div>
+
+<!-- ============ สถิติ + ประวัติ ============ -->
+<div class="panel" style="grid-column:1/-1">
+    <h2>สรุปผล &amp; ประวัติการตรวจ</h2>
+
+    <div class="stats">
+        <div class="stat"><div class="num" id="stTotal">0</div><div class="lbl">ตรวจทั้งหมด</div></div>
+        <div class="stat pass"><div class="num" id="stPass">0</div><div class="lbl">ผ่าน</div></div>
+        <div class="stat fail"><div class="num" id="stFail">0</div><div class="lbl">ไม่ผ่าน</div></div>
+        <div class="stat"><div class="num" id="stRate">–</div><div class="lbl">อัตราผ่าน</div></div>
+    </div>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>#</th><th>วันที่</th><th>เวลา</th><th>ผลการตรวจ</th><th>ความมั่นใจ</th><th>ที่มา</th></tr>
+            </thead>
+            <tbody id="logBody">
+                <tr><td colspan="6" class="empty">ยังไม่มีประวัติการตรวจ</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="controls">
+        <button class="ghost" onclick="exportCSV()">⬇ ดาวน์โหลด CSV</button>
+        <button class="danger" onclick="clearLog()">🗑 ล้างประวัติ</button>
+        <span id="store-status" class="store-status">💾 บันทึกไว้ในเครื่องแล้ว 0 รายการ</span>
+    </div>
+</div>
+
+<footer>Powered by Google Teachable Machine · TensorFlow.js</footer>
+
+</div>
+
+<script>
+/* ============================================================
+   ตั้งค่าโมเดล
+   ============================================================ */
+
+const MODEL_URL = "https://teachablemachine.withgoogle.com/models/dU1UGTjBZ/";
+
+// แปลงชื่อคลาสดิบจาก Teachable Machine เป็นข้อความภาษาไทย
+const LABELS = {
+    "yes": { th:"สวมเสื้อสะท้อนแสง",      pass:true  },
+    "no" : { th:"ไม่ได้สวมเสื้อสะท้อนแสง", pass:false }
+};
+
+function labelInfo(raw){
+    return LABELS[raw.trim().toLowerCase()] || { th:raw, pass:false };
+}
+
+/* ============================================================
+   สถานะ
+   ============================================================ */
+
+let model, webcam, maxPredictions;
+let running     = false;
+let soundOn     = true;
+
+let candidate   = null;   // คลาสที่กำลังจับเวลาอยู่
+let candidateAt = 0;      // เริ่มจับเวลาเมื่อไหร่
+let lockUntil   = 0;      // ล็อกหน้าจอแสดงผลจนถึงเวลานี้
+
+let threshold   = 0.85;   // ความมั่นใจขั้นต่ำ
+let dwellMs     = 2000;   // ต้องนิ่งกี่มิลลิวินาที
+const COOLDOWN  = 4000;   // หลังตัดสินแล้ว พักก่อนตรวจคนถัดไป
+
+let log = [];
+let seq = 0;              // เลขลำดับการตรวจแบบต่อเนื่อง ไม่รีเซ็ตตอนข้อมูลเก่าถูกตัดทิ้ง
+
+const STORE_KEY = "safetycheck.log.v1";
+const SEQ_KEY   = "safetycheck.seq.v1";
+const MAX_ROWS  = 100;    // เก็บสูงสุดกี่รายการ เกินนี้ตัดของเก่าทิ้ง
+
+const $ = id => document.getElementById(id);
+
+/* ============================================================
+   โหลดโมเดล
+   ============================================================ */
+
+async function loadModel(){
+    if(model) return;
+
+    $("model-status").innerHTML = "⏳ กำลังโหลดโมเดล...";
+
+    model = await tmImage.load(MODEL_URL + "model.json", MODEL_URL + "metadata.json");
+    maxPredictions = model.getTotalClasses();
+
+    buildBars();
+
+    $("model-status").innerHTML = "✅ โมเดลพร้อมใช้งาน (" + maxPredictions + " คลาส)";
+}
+
+function buildBars(){
+    const box = $("label-container");
+    box.innerHTML = "";
+
+    for(let i = 0; i < maxPredictions; i++){
+        const div = document.createElement("div");
+        div.className = "result-item";
+        div.innerHTML =
+            '<div class="result-header"><span>—</span><span>0%</span></div>' +
+            '<div class="progress"><div class="bar"></div></div>';
+        box.appendChild(div);
+    }
+}
+
+/* ============================================================
+   กล้อง
+   ============================================================ */
+
+async function startCamera(){
+    $("startBtn").disabled = true;
+    $("startBtn").innerHTML = "กำลังเปิดกล้อง...";
+
+    try{
+        await loadModel();
+
+        // flip=true ต้องตรงกับตอนเทรน — Teachable Machine พลิกภาพจากเว็บแคมให้อัตโนมัติ
+        // และยังทำให้ภาพบนจอเป็นกระจกเงา ซึ่งคนยืนหน้ากล้องดูแล้วไม่สับสน
+        webcam = new tmImage.Webcam(224, 224, true);
+        await webcam.setup();
+        await webcam.play();
+    }catch(err){
+        alert("เปิดกล้องไม่สำเร็จ: " + err.message +
+              "\n\nหมายเหตุ: กล้องต้องเปิดผ่าน http://localhost หรือ https:// เท่านั้น");
+        $("startBtn").disabled = false;
+        $("startBtn").innerHTML = "▶ เริ่มตรวจ";
+        return;
+    }
+
+    $("placeholder").style.display = "none";
+    $("stage").appendChild(webcam.canvas);
+
+    running = true;
+    resetDecision();
+
+    $("stopBtn").disabled = false;
+    $("startBtn").innerHTML = "▶ เริ่มตรวจ";
+
+    window.requestAnimationFrame(loop);
+}
+
+function stopCamera(){
+    if(!running) return;
+
+    running = false;
+    webcam.stop();
+
+    if(webcam.canvas.parentNode) webcam.canvas.remove();
+
+    $("placeholder").style.display = "";
+    $("startBtn").disabled = false;
+    $("stopBtn").disabled  = true;
+
+    resetDecision();
+    setStage(null);
+    $("verdict").className = "";
+}
+
+function toggleSound(){
+    soundOn = !soundOn;
+    $("soundBtn").classList.toggle("on", soundOn);
+    $("soundBtn").innerHTML = soundOn ? "🔊 เสียง" : "🔇 ปิดเสียง";
+}
+
+/* ============================================================
+   ลูปหลัก
+   ============================================================ */
+
+async function loop(){
+    if(!running) return;
+
+    webcam.update();
+    const predictions = await model.predict(webcam.canvas);
+
+    drawBars(predictions);
+    decide(predictions);
+
+    window.requestAnimationFrame(loop);
+}
+
+/* ------------------------------------------------------------
+   ตรรกะการตัดสิน: threshold + dwell time + cooldown
+   ------------------------------------------------------------ */
+
+function decide(predictions){
+    const now = performance.now();
+
+    // ยังอยู่ในช่วงแสดงผลของคนก่อนหน้า — ไม่ตรวจซ้ำ
+    if(now < lockUntil){
+        $("hold").style.width = "0%";
+        return;
+    }
+
+    const best = predictions.reduce((a, b) => b.probability > a.probability ? b : a);
+
+    // ความมั่นใจไม่พอ → ไม่ตัดสิน
+    if(best.probability < threshold){
+        candidate = null;
+        $("hold").style.width = "0%";
+        showWaiting("ยังไม่ชัด — กรุณายืนบนจุดตรวจ ให้เห็นตั้งแต่หัวถึงเอว");
+        return;
+    }
+
+    // เปลี่ยนคลาส → เริ่มจับเวลาใหม่
+    if(best.className !== candidate){
+        candidate   = best.className;
+        candidateAt = now;
+    }
+
+    const held = now - candidateAt;
+    $("hold").style.width = Math.min(100, held / dwellMs * 100) + "%";
+
+    if(held < dwellMs){
+        const info = labelInfo(best.className);
+        showWaiting("กำลังตรวจสอบ... (" + info.th + ")");
+        return;
+    }
+
+    // นิ่งครบเวลา → ตัดสิน
+    commit(best, "กล้อง");
+    lockUntil = now + COOLDOWN;
+    candidate = null;
+    $("hold").style.width = "0%";
+}
+
+function resetDecision(){
+    candidate = null;
+    lockUntil = 0;
+    $("hold").style.width = "0%";
+    showWaiting("กำลังรอผู้เข้าพื้นที่...");
+}
+
+/* ============================================================
+   แสดงผล
+   ============================================================ */
+
+function setStage(mode){
+    $("stage").className = mode || "";
+}
+
+function showWaiting(msg){
+    const v = $("verdict");
+    v.className = "show wait";
+    $("verdict-text").innerHTML   = "⏳ " + msg;
+    $("verdict-detail").innerHTML = "";
+    setStage("wait");
+}
+
+function commit(best, source){
+    const info    = labelInfo(best.className);
+    const percent = (best.probability * 100).toFixed(1);
+
+    const v = $("verdict");
+    v.className = "show " + (info.pass ? "pass" : "fail");
+
+    if(info.pass){
+        $("verdict-text").innerHTML   = "✅ ผ่าน — เข้าพื้นที่ได้";
+        $("verdict-detail").innerHTML = info.th + " · ความมั่นใจ " + percent + "%";
+        setStage("pass");
+        speak("ผ่าน เชิญเข้าพื้นที่ได้");
+    }else{
+        $("verdict-text").innerHTML   = "⛔ ไม่ผ่าน — ห้ามเข้าพื้นที่";
+        $("verdict-detail").innerHTML = "กรุณาสวมเสื้อสะท้อนแสง · ความมั่นใจ " + percent + "%";
+        setStage("fail");
+        beep();
+        speak("ไม่ผ่าน กรุณาสวมเสื้อสะท้อนแสงก่อนเข้าพื้นที่");
+    }
+
+    addLog(info, percent, source);
+}
+
+function drawBars(predictions){
+    const box = $("label-container");
+
+    for(let i = 0; i < maxPredictions; i++){
+        const p       = predictions[i];
+        const info    = labelInfo(p.className);
+        const percent = (p.probability * 100).toFixed(1);
+        const item    = box.children[i];
+
+        if(!item) continue;
+
+        item.querySelector("span:nth-child(1)").innerHTML = info.th;
+        item.querySelector("span:nth-child(2)").innerHTML = percent + "%";
+
+        const bar = item.querySelector(".bar");
+        bar.style.width = percent + "%";
+        bar.className   = "bar " + (info.pass ? "pass" : "fail");
+    }
+}
+
+/* ============================================================
+   เสียง
+   ============================================================ */
+
+function speak(text){
+    if(!soundOn || !window.speechSynthesis) return;
+
+    speechSynthesis.cancel();
+
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang  = "th-TH";
+    u.rate  = 1.0;
+    speechSynthesis.speak(u);
+}
+
+function beep(){
+    if(!soundOn) return;
+
+    try{
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+        [0, 0.25].forEach(delay => {
+            const osc  = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            osc.type            = "square";
+            osc.frequency.value = 720;
+            gain.gain.value     = 0.15;
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.start(ctx.currentTime + delay);
+            osc.stop(ctx.currentTime + delay + 0.15);
+        });
+    }catch(e){ /* เบราว์เซอร์บล็อกเสียง — ข้ามไป */ }
+}
+
+/* ============================================================
+   ประวัติ + สถิติ
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   เก็บลง localStorage — ข้อมูลอยู่ในเครื่องนี้เท่านั้น ไม่ส่งไปไหน
+   ------------------------------------------------------------ */
+
+function loadStore(){
+    try{
+        const raw = localStorage.getItem(STORE_KEY);
+        const arr = raw ? JSON.parse(raw) : [];
+
+        log = Array.isArray(arr) ? arr : [];
+        seq = parseInt(localStorage.getItem(SEQ_KEY), 10) || 0;
+
+        // กันกรณีข้อมูลเก่าไม่มีเลขลำดับ หรือ SEQ_KEY หาย
+        if(!seq && log.length) seq = log[0].no || log.length;
+    }catch(e){
+        // ข้อมูลเสียหรือเบราว์เซอร์ปิด localStorage — เริ่มใหม่จากศูนย์
+        console.warn("อ่านประวัติเดิมไม่ได้:", e);
+        log = [];
+        seq = 0;
+    }
+
+    renderLog();
+}
+
+function saveStore(){
+    try{
+        localStorage.setItem(STORE_KEY, JSON.stringify(log));
+        localStorage.setItem(SEQ_KEY, String(seq));
+        setStoreStatus(true);
+    }catch(e){
+        // โควตาเต็ม (หรือโหมดส่วนตัว) — ตัดของเก่าครึ่งหนึ่งแล้วลองใหม่หนึ่งครั้ง
+        console.warn("บันทึกไม่สำเร็จ:", e);
+
+        log = log.slice(0, Math.floor(log.length / 2));
+
+        try{
+            localStorage.setItem(STORE_KEY, JSON.stringify(log));
+            localStorage.setItem(SEQ_KEY, String(seq));
+            setStoreStatus(true);
+        }catch(e2){
+            setStoreStatus(false);
+        }
+    }
+}
+
+function setStoreStatus(ok){
+    const el = $("store-status");
+    if(!el) return;
+
+    el.innerHTML = ok
+        ? "💾 บันทึกไว้ในเครื่องแล้ว " + log.length + " รายการ"
+        : "⚠️ บันทึกไม่ได้ — ประวัติจะหายเมื่อปิดหน้าเว็บ";
+}
+
+function addLog(info, percent, source){
+    const now = new Date();
+
+    seq++;
+
+    log.unshift({
+        no      : seq,
+        time    : now.toLocaleTimeString("th-TH"),
+        date    : now.toLocaleDateString("th-TH"),
+        result  : info.th,
+        pass    : info.pass,
+        percent : percent,
+        source  : source
+    });
+
+    if(log.length > MAX_ROWS) log.pop();
+
+    saveStore();
+    renderLog();
+}
+
+function renderLog(){
+    const body = $("logBody");
+
+    if(log.length === 0){
+        body.innerHTML = '<tr><td colspan="6" class="empty">ยังไม่มีประวัติการตรวจ</td></tr>';
+    }else{
+        body.innerHTML = log.map(r =>
+            "<tr>" +
+                "<td>" + r.no + "</td>" +
+                "<td>" + (r.date || "–") + "</td>" +
+                "<td>" + r.time + "</td>" +
+                '<td class="' + (r.pass ? "pass" : "fail") + '">' +
+                    (r.pass ? "✅ ผ่าน" : "⛔ ไม่ผ่าน") + " — " + r.result +
+                "</td>" +
+                "<td>" + r.percent + "%</td>" +
+                "<td>" + r.source + "</td>" +
+            "</tr>"
+        ).join("");
+    }
+
+    const total = log.length;
+    const pass  = log.filter(r => r.pass).length;
+
+    $("stTotal").innerHTML = total;
+    $("stPass").innerHTML  = pass;
+    $("stFail").innerHTML  = total - pass;
+    $("stRate").innerHTML  = total ? Math.round(pass / total * 100) + "%" : "–";
+}
+
+function clearLog(){
+    if(log.length && !confirm("ล้างประวัติการตรวจทั้งหมด " + log.length + " รายการ?\nข้อมูลที่บันทึกไว้ในเครื่องจะถูกลบถาวร กู้คืนไม่ได้")) return;
+
+    log = [];
+    seq = 0;
+
+    try{
+        localStorage.removeItem(STORE_KEY);
+        localStorage.removeItem(SEQ_KEY);
+    }catch(e){ /* ปิด localStorage ไว้ — ไม่ต้องทำอะไร */ }
+
+    setStoreStatus(true);
+    renderLog();
+}
+
+function exportCSV(){
+    if(!log.length){ alert("ยังไม่มีข้อมูลให้ดาวน์โหลด"); return; }
+
+    const rows = [["ลำดับ","วันที่","เวลา","ผลการตรวจ","รายละเอียด","ความมั่นใจ(%)","ที่มา"]];
+
+    log.slice().reverse().forEach((r, i) => {
+        rows.push([i + 1, r.date, r.time, r.pass ? "ผ่าน" : "ไม่ผ่าน", r.result, r.percent, r.source]);
+    });
+
+    const csv  = "﻿" + rows.map(r => r.join(",")).join("\n");
+    const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
+    const a    = document.createElement("a");
+
+    a.href     = URL.createObjectURL(blob);
+    a.download = "safetycheck-log.csv";
+    a.click();
+
+    URL.revokeObjectURL(a.href);
+}
+
+/* ============================================================
+   ทดสอบด้วยรูปภาพ
+   ============================================================ */
+
+async function analyzeFile(file){
+    if(!file || !file.type.startsWith("image/")) return;
+
+    stopCamera();
+    await loadModel();
+
+    const img = new Image();
+
+    img.onload = async function(){
+        $("placeholder").style.display = "none";
+
+        const old = $("stage").querySelector("img");
+        if(old) old.remove();
+
+        $("stage").appendChild(img);
+
+        const predictions = await model.predict(img);
+
+        drawBars(predictions);
+
+        const best = predictions.reduce((a, b) => b.probability > a.probability ? b : a);
+
+        if(best.probability < threshold){
+            showWaiting("ความมั่นใจต่ำกว่าเกณฑ์ (" + (best.probability * 100).toFixed(1) + "%) — ไม่ตัดสิน");
+        }else{
+            commit(best, "รูปภาพ");
+        }
+
+        URL.revokeObjectURL(img.src);
+    };
+
+    img.src = URL.createObjectURL(file);
+}
+
+document.addEventListener("paste", e => {
+    for(const item of e.clipboardData.items){
+        if(item.type.startsWith("image/")){
+            e.preventDefault();
+            analyzeFile(item.getAsFile());
+            break;
+        }
+    }
+});
+
+const dz = $("drop-zone");
+
+dz.addEventListener("dragover",  e => { e.preventDefault(); dz.classList.add("dragover"); });
+dz.addEventListener("dragleave", () => dz.classList.remove("dragover"));
+dz.addEventListener("drop",      e => {
+    e.preventDefault();
+    dz.classList.remove("dragover");
+    analyzeFile(e.dataTransfer.files[0]);
+});
+
+$("fileInput").addEventListener("change", e => {
+    analyzeFile(e.target.files[0]);
+    e.target.value = "";
+});
+
+/* ============================================================
+   ตัวปรับค่า
+   ============================================================ */
+
+$("thSlider").addEventListener("input", e => {
+    threshold = e.target.value / 100;
+    $("thVal").innerHTML = e.target.value + "%";
+});
+
+$("dwSlider").addEventListener("input", e => {
+    dwellMs = e.target.value * 100;
+    $("dwVal").innerHTML = (dwellMs / 1000).toFixed(1) + " วิ";
+});
+
+// เว้นวรรค = ข้าม cooldown ไปตรวจคนถัดไปทันที
+document.addEventListener("keydown", e => {
+    if(e.code === "Space" && running){
+        e.preventDefault();
+        lockUntil = 0;
+        candidate = null;
+    }
+});
+
+// ดึงประวัติเดิมกลับมาก่อน แล้วค่อยโหลดโมเดลล่วงหน้า จะได้กดเริ่มแล้วตรวจได้เลย
+loadStore();
+
+loadModel().catch(err => {
+    $("model-status").innerHTML = "❌ โหลดโมเดลไม่สำเร็จ";
+    console.error(err);
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,7 @@
+# เครื่องมือ/ตั้งค่าเฉพาะเครื่อง ไม่ต้องขึ้น repo สาธารณะ
+.claude/
+
+# ไฟล์ขยะของ OS
+Thumbs.db
+desktop.ini
+.DS_Store
