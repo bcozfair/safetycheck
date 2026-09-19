@@ -246,10 +246,14 @@ main{
    ส่วนภาพจากกล้องเป็นจัตุรัส 224x224 อยู่แล้ว contain กับ cover จึงไม่ต่างกัน */
 #stage canvas,#stage img{
     width:100%;height:100%;
-    object-fit:contain;
+    object-fit:cover;
     display:block;
     z-index:0;
     animation:fadein .5s var(--ease) both;
+}
+img {
+    overflow-clip-margin: content-box;
+    overflow: clip;
 }
 
 /* ต้องกำหนด z-index ให้ทุกชั้นชัดเจน — ตัวรูปมีแอนิเมชัน opacity จึงสร้าง stacking context
